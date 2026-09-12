@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Safari WebGPU pipeline compilation repro</title>
+  <style>
+    body { max-width: 920px; margin: 32px auto; padding: 0 20px; color: #182432; background: #f7f9fc; font: 16px/1.5 system-ui, sans-serif; }
+    h1 { font-size: 26px; line-height: 1.2; }
+    h2 { font-size: 18px; margin-bottom: 8px; }
+    p { margin: 12px 0; }
+    #status { min-height: 48px; font-weight: 600; white-space: pre-wrap; }
+    #surface { width: 256px; height: 96px; border-radius: 6px; background: #0a121a; }
+    figure { margin: 24px 0; padding: 20px; background: white; border: 1px solid #dbe2ea; border-radius: 8px; }
+    svg { display: block; width: 100%; height: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-variant-numeric: tabular-nums; }
+    th, td { padding: 8px; text-align: left; border-bottom: 1px solid #dbe2ea; }
+    th:last-child, td:last-child { text-align: right; }
+    button { padding: 8px 14px; font: inherit; cursor: pointer; }
+    .note { color: #4d5d6e; font-size: 14px; }
+    #warning { color: #9b321c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>WebGPU async pipeline compilation</h1>
+  <p>This test runs automatically. It submits <strong>100 fresh pipelines at once</strong>,
+    then measures their first and repeat draws. Every reload changes constants used in
+    the shader output to prevent reuse of the same cached PSOs.</p>
+  <canvas id="surface" width="256" height="96" aria-label="A green square continuously bounces back and forth"></canvas>
+  <p class="note">The square uses an existing pipeline on the same device and keeps bouncing after the test finishes.
+    Any pause during compilation or drawing is a hitch.</p>
+  <p id="status" role="status">Preparing the animation pipeline...</p>
+  <section id="results" hidden>
+    <figure>
+      <h2>Measured durations</h2>
+      <svg id="chart" viewBox="0 0 880 270" role="img" aria-labelledby="chart-title chart-description"></svg>
+      <figcaption class="note">All bars use the same linear scale. The timer gap overlaps compilation;
+        these bars are separate measurements, not a stacked timeline.</figcaption>
+    </figure>
+    <table>
+      <thead><tr><th>Measurement</th><th>Milliseconds</th></tr></thead>
+      <tbody id="timings"></tbody>
+    </table>
+    <p id="validation"></p>
+    <p id="warning"></p>
+    <button id="download" type="button">Download results JSON</button>
+    <p class="note">Reload this page to run another fresh batch. No cache clearing is needed.</p>
+  </section>
+  <p class="note">Expected: rendering continues while pipelines compile, and first-use time is close to repeat-use time.
+    The first/repeat measurements include command encoding, GPU execution, and readback; CPU output validation is excluded.</p>
+  <script>
+    function ShowStatus(message) {
+      document.getElementById('status').textContent = message;
+    }
+
+    function ShowResults(result) {
+      const rows = [
+        ['Async pipelines ready', result.readyMs, '#2864be'],
+        ['First draw + readback', result.firstUseMs, '#b76316'],
+        ['Repeat draw + readback', result.secondUseMs, '#188263'],
+        ['Longest timer gap', result.maxTimerGapMs, '#bf3545']
+      ];
+      const chart = document.getElementById('chart');
+      const scale = Math.max(1, ...rows.map(row => row[1]));
+      const left = 220;
+      const width = 540;
+      const elements = [
+        '<title id="chart-title">Pipeline compilation and first-use durations</title>',
+        `<desc id="chart-description">${rows.map(([label, ms]) => `${label}: ${ms.toFixed(2)} ms`).join('. ')}.</desc>`
+      ];
+      for(let tick = 0; tick <= 4; ++tick) {
+        const x = left + width * tick / 4;
+        elements.push(`<line x1="${x}" y1="30" x2="${x}" y2="230" stroke="#dbe2ea"/>`,
+          `<text x="${x}" y="255" text-anchor="middle" font-size="13" fill="#4d5d6e">${(scale * tick / 4).toFixed(0)} ms</text>`);
+      }
+      rows.forEach(([label, ms, color], index) => {
+        const y = 40 + index * 48;
+        const barWidth = width * ms / scale;
+        elements.push(`<text x="0" y="${y + 21}" font-size="15" fill="#182432">${label}</text>`,
+          `<rect x="${left}" y="${y}" width="${barWidth}" height="30" fill="${color}"/>`,
+          `<text x="${left + barWidth + 8}" y="${y + 21}" font-size="14" fill="#182432">${ms.toFixed(2)} ms</text>`);
+      });
+      chart.innerHTML = elements.join('');
+      const timings = document.getElementById('timings');
+      for(const [label, ms] of [['Submit all module/pipeline requests', result.submittedMs], ...rows]) {
+        const row = timings.insertRow();
+        row.insertCell().textContent = label;
+        row.insertCell().textContent = ms.toFixed(2);
+      }
+      document.getElementById('validation').textContent =
+        `Validated all ${result.pipelineCount} pipelines on both draws: ${result.validatedValues} integer values matched.`;
+      if(result.visibility.some(state => state !== 'visible')) {
+        document.getElementById('warning').textContent =
+          'The page was hidden during this run. Reload and keep it visible before comparing timings.';
+      }
+      ShowStatus('Complete. Compare the first draw with the repeat draw, and the timer gap with compilation time.');
+      document.getElementById('results').hidden = false;
+    }
+
+    document.getElementById('download').onclick = () => {
+      const url = URL.createObjectURL(new Blob([JSON.stringify(window.probeResult, null, 2)], {type: 'application/json'}));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'safari-webgpu-pipeline-results.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    };
+  </script>
+  <script src="probe.js"></script>
+</body>
+</html>
