@@ -55,7 +55,7 @@ dimensions and layout; each graph scales its own axis.
 Pipeline promises resolve after 1.88 seconds, but the first draw then takes another
 2.01 seconds, versus 1 ms for the repeat. A 1.87-second timer gap shows that the
 main event loop also stalls during compilation. Async completion leaves expensive
-work deferred until first use.
+work deferred until first use. [WebKit Bug](https://bugs.webkit.org/show_bug.cgi?id=324043)
 
 ![Safari: long compilation, first-use cost, and timer stall](safari.png)
 
@@ -74,7 +74,7 @@ Pipeline creation took 4.32 seconds, with a 58 ms maximum timer gap: it avoided
 Safari's multi-second event-loop freeze, but compilation and draw/readback
 completion were slower than Chrome in these results. The 73/105 ms readbacks are
 consistent with Firefox's [100 ms device polling interval](https://github.com/mozilla-firefox/firefox/blob/main/dom/webgpu/ipc/WebGPUParent.cpp).
-This is a likely notification delay; these timings do not establish slow GPU execution.
+This is a likely notification delay; these timings do not establish slow GPU execution. [Mozilla Bug](https://bugzilla.mozilla.org/show_bug.cgi?id=2071605)
 
 ![Firefox: slow pipeline creation with a much shorter timer gap than Safari](firefox.png)
 
